@@ -166,12 +166,6 @@ def test(config, task, model_gcn_pt, model_cnn_pt,test_type='test'):
             "Smin" :Smin
         }, config.test_result_path + task + f".pt"
     )
-    # if test_type == 'AF2test':
-    #     result_name = config.test_result_path + 'AF2'+ model_pt[6:]
-    # else:
-    # result_name = config.test_result_path + model_pt[5:]
-    # with open(result_name, "wb") as f:
-    #     pkl.dump([y_pred_all.numpy(), y_true_all.numpy()], f)
 
 
 def str2bool(v):
