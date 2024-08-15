@@ -13,43 +13,36 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = head_dim
 
-        # 确保输入维度可以被头数整除
         assert input_dim % num_heads == 0
 
-        # 线性变换层
         self.query_linear = nn.Linear(input_dim, num_heads * head_dim)
         self.key_linear = nn.Linear(input_dim, num_heads * head_dim)
         self.value_linear = nn.Linear(input_dim, num_heads * head_dim)
 
-        # 最后的线性变换层
         self.output_linear = nn.Linear(num_heads * head_dim, input_dim)
 
     def forward(self, x):
         batch_size, seq_len, _ = x.size()
 
-        # 线性变换
         queries = self.query_linear(x)
         keys = self.key_linear(x)
         values = self.value_linear(x)
 
-        # 将输出 reshape 成多个头
         queries = queries.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         keys = keys.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # 计算注意力分数
         attention_scores = torch.matmul(queries, keys.transpose(-2, -1)) / torch.sqrt(
             torch.tensor(self.head_dim, dtype=torch.float32))
         attention_weights = torch.nn.functional.softmax(attention_scores, dim=-1)
 
-        # 加权求和
+
         attention_output = torch.matmul(attention_weights, values)
 
-        # 将多个头的结果拼接在一起
+
         attention_output = attention_output.transpose(1, 2).contiguous().view(batch_size, seq_len,
                                                                               self.num_heads * self.head_dim)
 
-        # 最后的线性变换
         output = self.output_linear(attention_output)
 
         return output
