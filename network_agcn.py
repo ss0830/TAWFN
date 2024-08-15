@@ -157,8 +157,6 @@ class AGCN(torch.nn.Module):
         # self.multihead_attention = SelfAttention(512, 256)
 
         # self.lstm = nn.LSTM(input_size=512, hidden_size=256, num_layers=1, batch_first=True, bidirectional=True)
-
-        # self.msma = MSMA(input_dim=512, hidden_dim=512, num_classes=out_dim, num_head=4)
         # self.lstm_model = ProteinBiLSTM(512, 16, 2, 512)
         #self.proj_spot = nn.Linear(19, 512)
         if esm_embed:
