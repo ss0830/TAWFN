@@ -31,7 +31,7 @@ class GoTermDataset(Dataset):
         self.pos_weights = torch.tensor(pos_weights).float()
 
 
-        self.processed_dir = 'data/dataset'
+        self.processed_dir = 'data/processed'
 
         self.graph_list = torch.load(os.path.join(self.processed_dir, f"{set_type}_graph.pt")) 
         if set_type == 'AF2test':
