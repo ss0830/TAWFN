@@ -2,88 +2,106 @@ import math
 from typing import List, Optional, Tuple, Type
 
 import torch
-from torch import Tensor
+from torch import Tensor,nn
 from torch.nn import LayerNorm, Linear
 from torch_geometric.nn import GCNConv
 from torch_geometric.utils import to_dense_batch
 
-class MAB(torch.nn.Module):
-    r"""Multihead-Attention Block."""
+
+class MAB(nn.Module):
+    r"""Multihead-Attention Block with optional convolution and layer normalization."""
+
     def __init__(self, dim_Q: int, dim_K: int, dim_V: int, num_heads: int,
-                 Conv: Optional[Type] = None, layer_norm: bool = False):
-        super().__init__()
+                 Conv: Optional[Type[nn.Module]] = None, layer_norm: bool = False):
+        super(MAB, self).__init__()
         self.dim_V = dim_V
         self.num_heads = num_heads
         self.layer_norm = layer_norm
 
+        # Linear layer to project Q to dim_V
         self.fc_q = Linear(dim_Q, dim_V)
 
+        # Choose between linear or convolutional layers for K and V
         if Conv is None:
-            self.layer_k = Linear(dim_K, dim_V)
-            self.layer_v = Linear(dim_K, dim_V)
+            self.fc_k = Linear(dim_K, dim_V)
+            self.fc_v = Linear(dim_K, dim_V)
         else:
-            self.layer_k = Conv(dim_K, dim_V)
-            self.layer_v = Conv(dim_K, dim_V)
+            self.fc_k = Conv(dim_K, dim_V)
+            self.fc_v = Conv(dim_K, dim_V)
 
-        if layer_norm:
+        # Layer normalization if required
+        if self.layer_norm:
             self.ln0 = LayerNorm(dim_V)
             self.ln1 = LayerNorm(dim_V)
 
+        # Output linear layer
         self.fc_o = Linear(dim_V, dim_V)
 
     def reset_parameters(self):
+        """Resets the parameters of the layers."""
         self.fc_q.reset_parameters()
-        self.layer_k.reset_parameters()
-        self.layer_v.reset_parameters()
+        self.fc_k.reset_parameters()
+        self.fc_v.reset_parameters()
         if self.layer_norm:
             self.ln0.reset_parameters()
             self.ln1.reset_parameters()
         self.fc_o.reset_parameters()
-        pass
 
     def forward(
-        self,
-        Q: Tensor,
-        K: Tensor,
-        graph: Optional[Tuple[Tensor, Tensor, Tensor]] = None,
-        mask: Optional[Tensor] = None,
+            self,
+            Q: Tensor,
+            K: Tensor,
+            graph: Optional[Tuple[Tensor, Tensor, Tensor]] = None,
+            mask: Optional[Tensor] = None,
     ) -> Tensor:
+        """Forward pass for the MAB block."""
 
-        Q = self.fc_q(Q)
+        # Project Q using the linear layer
+        Q_proj = self.fc_q(Q)
 
+        # Handle graph input or standard input
         if graph is not None:
             x, edge_index, batch = graph
-            K, V = self.layer_k(x, edge_index), self.layer_v(x, edge_index)
-            K, _ = to_dense_batch(K, batch)
-            V, _ = to_dense_batch(V, batch)
+            K_proj = self.fc_k(x, edge_index)
+            V_proj = self.fc_v(x, edge_index)
+            K_proj, _ = to_dense_batch(K_proj, batch)
+            V_proj, _ = to_dense_batch(V_proj, batch)
         else:
-            K, V = self.layer_k(K), self.layer_v(K)
+            K_proj = self.fc_k(K)
+            V_proj = self.fc_v(K)
 
-        dim_split = self.dim_V // self.num_heads
-        Q_ = torch.cat(Q.split(dim_split, 2), dim=0)
-        K_ = torch.cat(K.split(dim_split, 2), dim=0)
-        V_ = torch.cat(V.split(dim_split, 2), dim=0)
+        # Split for multi-head attention
+        head_dim = self.dim_V // self.num_heads
+        Q_heads = torch.cat(Q_proj.split(head_dim, dim=2), dim=0)
+        K_heads = torch.cat(K_proj.split(head_dim, dim=2), dim=0)
+        V_heads = torch.cat(V_proj.split(head_dim, dim=2), dim=0)
 
+        # Compute attention scores
+        attention_scores = Q_heads.bmm(K_heads.transpose(1, 2)) / math.sqrt(head_dim)
+
+        # Apply mask if provided
         if mask is not None:
-            mask = torch.cat([mask for _ in range(self.num_heads)], 0)
-            attention_score = Q_.bmm(K_.transpose(1, 2))
-            attention_score = attention_score / math.sqrt(self.dim_V)
-            A = torch.softmax(mask + attention_score,-1)
+            mask_repeated = mask.repeat(self.num_heads, 1, 1)
+            attention_scores += mask_repeated
+            attention_weights = torch.softmax(attention_scores, dim=-1)
         else:
-            A = torch.softmax(
-                Q_.bmm(K_.transpose(1, 2)) / math.sqrt(self.dim_V), -1)
+            attention_weights = torch.softmax(attention_scores, dim=-1)
 
-        out = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
+        # Compute attention output
+        attention_output = attention_weights.bmm(V_heads)
+        concatenated_output = torch.cat(attention_output.split(Q.size(0), dim=0), dim=2)
+
+        # Add residual connection and apply layer normalization
+        if self.layer_norm:
+            concatenated_output = self.ln0(concatenated_output)
+
+        # Final output projection with ReLU activation and optional layer normalization
+        output = concatenated_output + self.fc_o(concatenated_output).relu()
 
         if self.layer_norm:
-            out = self.ln0(out)
+            output = self.ln1(output)
 
-        out = out + self.fc_o(out).relu()
-
-        if self.layer_norm:
-            out = self.ln1(out)
-
-        return out
+        return output
 
 
 class PMA(torch.nn.Module):
@@ -119,7 +137,7 @@ class MHA(torch.nn.Module):
         Conv: Optional[Type] = None,
         num_nodes: int = 300,
         pooling_ratio: float = 0.25,
-        pool_sequences: List[str] = ['GMPool_G', 'SelfAtt', 'GMPool_I'],
+        pool_sequences: List[str] = ['GMPool_G', 'GMPool_G'],
         num_heads: int = 4,
         layer_norm: bool = False,
     ):
@@ -139,9 +157,8 @@ class MHA(torch.nn.Module):
         self.pools = torch.nn.ModuleList()
         num_out_nodes = math.ceil(num_nodes * pooling_ratio)
         for i, pool_type in enumerate(pool_sequences):
-            if pool_type not in ['GMPool_G', 'GMPool_I', 'SelfAtt']:
-                raise ValueError("Elements in 'pool_sequences' should be one "
-                                 "of 'GMPool_G', 'GMPool_I', or 'SelfAtt'")
+            if pool_type not in ['GMPool_G']:
+                raise ValueError("Elements in 'pool_sequences' should be  'GMPool_G'")
 
             if i == len(pool_sequences) - 1:
                 num_out_nodes = 1
@@ -150,12 +167,6 @@ class MHA(torch.nn.Module):
                 self.pools.append(
                     PMA(hidden_channels, num_heads, num_out_nodes,
                         Conv=self.Conv, layer_norm=layer_norm))
-                num_out_nodes = math.ceil(num_out_nodes * self.pooling_ratio)
-
-            elif pool_type == 'GMPool_I':
-                self.pools.append(
-                    PMA(hidden_channels, num_heads, num_out_nodes, Conv=None,
-                        layer_norm=layer_norm))
                 num_out_nodes = math.ceil(num_out_nodes * self.pooling_ratio)
 
     def reset_parameters(self):
@@ -185,3 +196,4 @@ class MHA(torch.nn.Module):
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}({self.in_channels}, '
                 f'{self.out_channels}, pool_sequences={self.pool_sequences})')
+
