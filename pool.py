@@ -102,30 +102,6 @@ class MAB(nn.Module):
             output = self.ln1(output)
 
         return output
-
-
-class PMA(torch.nn.Module):
-    r"""Graph pooling with Multihead-Attention."""
-    def __init__(self, channels: int, num_heads: int, num_seeds: int,
-                 Conv: Optional[Type] = None, layer_norm: bool = False):
-        super().__init__()
-        self.S = torch.nn.Parameter(torch.Tensor(1, num_seeds, channels))
-        self.mab = MAB(channels, channels, channels, num_heads, Conv=Conv,
-                       layer_norm=layer_norm)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.xavier_uniform_(self.S)
-        self.mab.reset_parameters()
-
-    def forward(
-        self,
-        x: Tensor,
-        graph: Optional[Tuple[Tensor, Tensor, Tensor]] = None,
-        mask: Optional[Tensor] = None,
-    ) -> Tensor:
-        return self.mab(self.S.repeat(x.size(0), 1, 1), x, graph, mask)
     
 class MHA(torch.nn.Module):
 
@@ -155,19 +131,25 @@ class MHA(torch.nn.Module):
         self.lin1 = Linear(in_channels, hidden_channels)
         self.lin2 = Linear(hidden_channels, out_channels)
         self.pools = torch.nn.ModuleList()
-        num_out_nodes = math.ceil(num_nodes * pooling_ratio)
-        for i, pool_type in enumerate(pool_sequences):
-            if pool_type not in ['GMPool_G']:
-                raise ValueError("Elements in 'pool_sequences' should be  'GMPool_G'")
 
-            if i == len(pool_sequences) - 1:
+    def _initialize_pools(self) -> nn.ModuleList:
+        """Initialize pooling layers based on pool_sequences."""
+        pools = nn.ModuleList()
+        num_out_nodes = math.ceil(self.num_nodes * self.pooling_ratio)
+
+        for i, pool_type in enumerate(self.pool_sequences):
+            if pool_type not in ['GMPool_G']:
+                raise ValueError(f"Invalid pool_type '{pool_type}', expected 'GMPool_G'")
+
+            if i == len(self.pool_sequences) - 1:
                 num_out_nodes = 1
 
-            if pool_type == 'GMPool_G':
-                self.pools.append(
-                    PMA(hidden_channels, num_heads, num_out_nodes,
-                        Conv=self.Conv, layer_norm=layer_norm))
-                num_out_nodes = math.ceil(num_out_nodes * self.pooling_ratio)
+            pools.append(
+                PMA(self.hidden_channels, self.num_heads, num_out_nodes, Conv=self.Conv, layer_norm=self.layer_norm)
+            )
+            num_out_nodes = math.ceil(num_out_nodes * self.pooling_ratio)
+
+        return pools
 
     def reset_parameters(self):
         self.lin1.reset_parameters()
@@ -197,3 +179,25 @@ class MHA(torch.nn.Module):
         return (f'{self.__class__.__name__}({self.in_channels}, '
                 f'{self.out_channels}, pool_sequences={self.pool_sequences})')
 
+class PMA(torch.nn.Module):
+    r"""Graph pooling with Multihead-Attention."""
+    def __init__(self, channels: int, num_heads: int, num_seeds: int,
+                 Conv: Optional[Type] = None, layer_norm: bool = False):
+        super().__init__()
+        self.S = torch.nn.Parameter(torch.Tensor(1, num_seeds, channels))
+        self.mab = MAB(channels, channels, channels, num_heads, Conv=Conv,
+                       layer_norm=layer_norm)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        torch.nn.init.xavier_uniform_(self.S)
+        self.mab.reset_parameters()
+
+    def forward(
+        self,
+        x: Tensor,
+        graph: Optional[Tuple[Tensor, Tensor, Tensor]] = None,
+        mask: Optional[Tensor] = None,
+    ) -> Tensor:
+        return self.mab(self.S.repeat(x.size(0), 1, 1), x, graph, mask)
