@@ -113,7 +113,7 @@ class MHA(torch.nn.Module):
         Conv: Optional[Type] = None,
         num_nodes: int = 300,
         pooling_ratio: float = 0.25,
-        pool_sequences: List[str] = ['GMPool_G', 'GMPool_G'],
+        pool_sequences: List[str] = ['GP', 'GP'],
         num_heads: int = 4,
         layer_norm: bool = False,
     ):
@@ -138,7 +138,7 @@ class MHA(torch.nn.Module):
         num_out_nodes = math.ceil(self.num_nodes * self.pooling_ratio)
 
         for i, pool_type in enumerate(self.pool_sequences):
-            if pool_type not in ['GMPool_G']:
+            if pool_type not in ['GP']:
                 raise ValueError(f"Invalid pool_type '{pool_type}', expected 'GMPool_G'")
 
             if i == len(self.pool_sequences) - 1:
