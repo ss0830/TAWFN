@@ -88,7 +88,7 @@ class SoftWeighted(nn.Module):
         return high_level_preds, weight_var
 
 class GraphCNN(nn.Module):
-    def __init__(self, channel_dims=[512,512,512], fc_dim=512, num_classes=256, pooling='MTP'):
+    def __init__(self, channel_dims=[512,512,512], fc_dim=512, num_classes=256, pooling='MHA'):
         super(GraphCNN, self).__init__()
 
         # Define graph convolutional layers
@@ -104,11 +104,8 @@ class GraphCNN(nn.Module):
         self.gcn = nn.ModuleList(gcn_layers)
         self.pooling = pooling
 
-        if self.pooling == "MHA":
-            self.pool = MHA(512, 256, 512, None, 10000, 0.25, ['GMPool_G', 'GMPool_G'], num_heads=8, layer_norm=True)
+        self.pool = MHA(512, 256, 512, None, 10000, 0.25, ['GP', 'GP'], num_heads=8, layer_norm=True)
 
-        else:
-            self.pool = gmp
         # Define dropout
         self.drop1 = nn.Dropout(p=0.2)
     
@@ -139,8 +136,6 @@ class GraphCNN(nn.Module):
             g_level_feat = self.pool(x, data.batch)
 
         n_level_feat = x
-
-
         return n_level_feat, g_level_feat
 
 
@@ -165,13 +160,7 @@ class AGCN(torch.nn.Module):
         else:
             self.gcn = GraphCNN(pooling=pooling)
         #self.esm_g_proj = nn.Linear(1280, 512)
-        self.readout = nn.Sequential(
-                        nn.Linear(512, 1024),
-                        nn.ReLU(),
-                        nn.Dropout(0.2),
-                        nn.Linear(1024, out_dim),
-                        nn.Sigmoid()
-        )
+        self.readout = nn.Sequential(nn.Linear(512, 1024),nn.ReLU(),nn.Dropout(0.2),nn.Linear(1024, out_dim),nn.Sigmoid())
         
         self.softmax = nn.Softmax(dim=-1)
      
