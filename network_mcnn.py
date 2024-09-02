@@ -64,12 +64,8 @@ class MCNN(nn.Module):
         self.proj_esm = nn.Linear(1280, 512)
         # self.lstm_model = ProteinLSTM(512, 16, 2, 512)
         self.emb = nn.Sequential(nn.Conv1d(input_dim, hidden_dim, kernel_size=3, padding=0),nn.BatchNorm1d(hidden_dim))
-
         self.ms_f = FPN_Module(hidden_dim)
-
         self.multi_head = MCAM(self.num_head,hidden_dim)
-
-
         self.fc_out = nn.Linear(hidden_dim, num_classes)
         self.init_parameters()
 
@@ -123,20 +119,20 @@ class MCNN(nn.Module):
         return output
 
 
-class MCAM(nn.Module):  # multi-head attention
+class MHA(nn.Module):  # multi-head attention
 
     neigh_k = list(range(3, 21, 2))
 
     def __init__(self,num_heads,hidden_dim):
-        super(MCAM, self).__init__()
+        super(MHA, self).__init__()
         self.num_heads = num_heads
         self.avgpool = nn.AdaptiveAvgPool1d(1)
         self.maxpool = nn.AdaptiveMaxPool1d(1)
         self.multi_head = nn.ModuleList([
-            CAM(self.neigh_k[i])
+            nn.ModuleList([CPAM(self.neigh_k[i]), SpatialAttention()])
             for i in range(num_heads)
         ])
-
+        # self.high_lateral_attn = nn.Sequential(nn.Linear(num_heads * hidden_dim,hidden_dim),nn.ReLU(),nn.Linear(hidden_dim,num_heads))
         self.weight_var = Parameter(torch.ones(num_heads))
 
     def forward(self, x):
@@ -144,18 +140,14 @@ class MCAM(nn.Module):  # multi-head attention
         avg_pool = self.avgpool(x)
         pool_feats = []
         for id,head in enumerate(self.multi_head):
-            weight = head(max_pool,avg_pool)
-            self_attn = x * weight
-            pool_feats.append(torch.max(self_attn,dim=2)[0])
+            weight_cpam = head[0](max_pool,avg_pool)
+            self_attn = x * weight_cpam
+            weight_sam = head[1](self_attn)
+            self_sam = self_attn *weight_sam
+            x = x + self_sam
 
-        # concat_pool_features = torch.cat(pool_feats, dim=1)
-        # fusion_weights = self.high_lateral_attn(concat_pool_features)
-        # fusion_weights = torch.sigmoid(fusion_weights)
-
-        # high_pool_fusion = 0
-        # for i in range(self.num_heads):
-        #     high_pool_fusion += torch.unsqueeze(fusion_weights[:,i], dim=1) * pool_feats[i]
-
+            # output = head(x)
+            pool_feats.append(torch.max(x,dim=2)[0])
         weight_var = [torch.exp(self.weight_var[i]) / torch.sum(torch.exp(self.weight_var)) for i in
                       range(self.num_heads)]
         high_pool_fusion = 0
@@ -164,16 +156,18 @@ class MCAM(nn.Module):  # multi-head attention
 
         return high_pool_fusion
 
-class CAM(nn.Module):
-    def __init__(self,k,pool_types = ['avg','max']):
-        super(CAM, self).__init__()
+class CPAM(nn.Module):
+    # def __init__(self, k ,pool_types = ['avg','max']):
+    def __init__(self, k ,pool_types = ['avg','max']):
+        super(CPAM, self).__init__()
         self.pool_types = pool_types
         self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=(k - 1) // 2, bias=False)
-
+        self.sigmoid = nn.Sigmoid()
     def forward(self, max_pool,avg_pool):
         channel_att_sum = 0.
         for pool_type in self.pool_types:
             if pool_type == 'avg':
+                # channel_att_raw = self.conv(avg_pool.transpose(1, 2)).transpose(1, 2)
                 channel_att_raw = self.conv(avg_pool.transpose(1, 2)).transpose(1, 2)
             elif pool_type == 'max':
                 channel_att_raw = self.conv(max_pool.transpose(1, 2)).transpose(1, 2)
@@ -183,6 +177,7 @@ class CAM(nn.Module):
         scale = torch.sigmoid(channel_att_sum)
 
         return scale
+
 class SpatialAttention(nn.Module):
     def __init__(self, kernel_size = 7):
         super(SpatialAttention, self).__init__()
