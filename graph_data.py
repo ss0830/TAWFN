@@ -7,7 +7,6 @@ import numpy as np
 import os
 from utils import aa2idx
 import sys
-import esm
 
 def collate_fn(batch):
     graphs, y_trues = map(list, zip(*batch))
@@ -22,15 +21,6 @@ class GoTermDataset(Dataset):
         else:
             prot2annot, goterms, gonames, counts = load_GO_annot('data/nrSwiss-Model-GO_annot.tsv')
 
-
-        class_sizes = counts[self.task]
-        mean_class_size = np.mean(class_sizes)
-        pos_weights = mean_class_size / class_sizes
-        pos_weights = np.maximum(1.0, np.minimum(10.0, pos_weights))
-
-        self.pos_weights = torch.tensor(pos_weights).float()
-
-
         self.processed_dir = 'data/processed'
 
         self.graph_list = torch.load(os.path.join(self.processed_dir, f"{set_type}_graph.pt")) 
@@ -40,7 +30,6 @@ class GoTermDataset(Dataset):
             self.pdbch_list = torch.load(os.path.join(self.processed_dir, f"{set_type}_pdbch.pt"))[f"{set_type}_pdbch"]
         self.y_true = np.stack([prot2annot[pdb_c][self.task] for pdb_c in self.pdbch_list])
         self.y_true = torch.tensor(self.y_true)
-
 
         prot2annot1, goterms1, gonames1, counts1 = load_GO_annot("data/nrSwiss-Model-GO_annot.tsv")
 
