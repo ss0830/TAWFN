@@ -13,7 +13,6 @@ warnings.filterwarnings("ignore")
 def train(config, task):
 
     train_set = GoTermDataset("train", task)
-    pos_weights = torch.tensor(train_set.pos_weights).float()
     valid_set = GoTermDataset("val", task)
     train_loader = DataLoader(train_set, batch_size=config.batch_size, shuffle=True, collate_fn=collate_fn)
     val_loader = DataLoader(valid_set, batch_size=config.batch_size, shuffle=False, collate_fn=collate_fn)
@@ -38,7 +37,6 @@ def train(config, task):
         for idx_batch, batch in enumerate(train_loader):
             model.train()
             
-            #
             if config.contrast:
                 y_pred,  g_feat1, g_feat2, _= model(batch[0].to(config.device))
                 # y_pred, _ = net([y_pred1,y_pred2])
