@@ -1,6 +1,7 @@
 # TAWFN
 
 A Deep Learning Framework for Protein Function Prediction.
+
 Most of the codes in this study are obtained from  [HEAL](https://github.com/ZhonghuiGu/HEAL)  and  [MMSMAPlus](https://github.com/wzy-2020/MMSMAPlus). For more details one can check the original papers at:
 
 [Wang Z, Deng Z, Zhang W, Lou Q, Choi KS, Wei Z, Wang L, Wu J. MMSMAPlus: a multi-view multi-scale multi-attention embedding model for protein function prediction. Brief Bioinform. 2023 Jul 20;24(4):bbad201.](https://doi.org/10.1093/bib/bbad201)
