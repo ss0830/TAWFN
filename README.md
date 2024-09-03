@@ -1,7 +1,11 @@
 # TAWFN
 
 A Deep Learning Framework for Protein Function Prediction.
+Most of the codes in this study are obtained from  [HEAL](https://github.com/ZhonghuiGu/HEAL)  and  [MMSMAPlus](https://github.com/wzy-2020/MMSMAPlus). For more details one can check the original papers at:
 
+[Wang Z, Deng Z, Zhang W, Lou Q, Choi KS, Wei Z, Wang L, Wu J. MMSMAPlus: a multi-view multi-scale multi-attention embedding model for protein function prediction. Brief Bioinform. 2023 Jul 20;24(4):bbad201.](https://doi.org/10.1093/bib/bbad201)
+
+[Zhonghui Gu, Xiao Luo, Jiaxiao Chen, Minghua Deng, Luhua Lai, Hierarchical graph transformer with contrastive learning for protein function prediction, Bioinformatics, Volume 39, Issue 7, July 2023, btad410.](https://doi.org/10.1093/bioinformatics/btad410)
 
 ## Setup Environment
 
@@ -27,7 +31,7 @@ pip install torch_geometric==1.6.3
 cd data
 ```
 
-Data set can be downloaded from  [here](https://disk.pku.edu.cn/link/AA19000E6B9D98480EA943A777A9161347).
+Data set can be downloaded from  [here](https://pan.baidu.com/s/1H8o-LvBVKQOjPG6hAnJtvQ?pwd=oax1).
 
 ```
 tar -zxvf dataset.tar.gz
@@ -38,7 +42,6 @@ The dataset related files will be under `data/dataset`
 python test.py  --device 0
                 --task bp 
                 --batch_size 64 
-                --AF2model False
                 --model_cnn ./MCNN/model_bp.pt
                 --model_gcn ./AGCN/model_bp.pt
 ```
